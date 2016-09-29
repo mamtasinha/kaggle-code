@@ -1,0 +1,56 @@
+```{r}
+library(glmnet)
+library(Metrics)
+library(MASS)
+
+# Read in each data files into a data frame
+
+training.target <- read.csv("../data/training_target.csv")
+training.features <- read.csv("../data/training_features.csv")
+validation.features <- read.csv("../data/validation_features.csv")
+validation.target <- read.csv("../data/validation_target.csv")
+leaderboard.features<- read.csv("../data/leaderboard_features.csv")
+leaderboard.predictions <-read.csv("../data/leaderboard_predictions-example.csv")
+
+#NA values replaced by median value
+na_replace_by_median <- function(data) {
+    data <- as.data.frame(lapply(data, function(x) {x[is.na(x)] <- median(x, na.rm=TRUE); x}))
+}
+
+#Drop columns with NA
+na_cols <- function(data) {
+    nacols = sapply(data, function(x)all(is.na(x)))
+}
+
+#Replace NA values by median
+t.features <-na_replace_by_median(training.features)
+v.features <- na_replace_by_median(validation.features)
+lb.features <- na_replace_by_median(leaderboard.features)
+
+#Drop columns with all NAs
+vw = na_cols(v.features)
+tf.nona = t.features[,!vw]
+vf.nona = v.features[,!vw]
+lb.nona = lb.features[,!vw]
+
+#Combine features and target into one dataset
+als.data = cbind(ALSFRS_slope=training.target[,-1], tf.nona[,-1])
+
+#Random Forest
+library(gbm)
+set.seed(1)
+rf.fit = gbm(ALSFRS_slope~., data = als.data, distribution="gaussian", shrinkage = 0.01
+            , n.minobsinnode = 50
+            , interaction.depth =3
+            , n.trees = 500)
+mod.pred = predict(rf.fit, vf.nona[,-1],n.tree=500)
+rmse(mod.pred, validation.target[,-1]) #0.5846703 a bit improvement 
+lb.mod.pred = predict(rf.fit, lb.nona[,-1])
+
+
+#Write out the leaderboard predictions
+leaderboard.predictions$ALSFRS_slope <- lb.mod.pred
+out.str <- paste("leaderboard.out_", format(Sys.time(), "%Y-%m-%d_%H:%M:%S"), sep="")
+write.csv(leaderboard.predictions, file = out.str, row.names=FALSE)
+
+```
